@@ -1,10 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import recipeRoutes from './routes/recipeRoutes.js';
 
-// Load local environment variables from .env file
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from Server root directory regardless of current working directory
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 
@@ -14,8 +19,8 @@ const corsOptions = {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
 };
-app.use(cors(corsOptions));         //Allows React app on port 5173 to talk to the this server safely without CORS issues
-app.use(express.json()); //Enables the server to read incoming JSON payloads (res.body)
+app.use(cors(corsOptions));         // Allows React app on port 5173 to talk to this server safely without CORS issues
+app.use(express.json());            // Enables the server to read incoming JSON payloads (req.body)
 
 // API Routes Mounting
 app.use("/api/recipes", recipeRoutes);
