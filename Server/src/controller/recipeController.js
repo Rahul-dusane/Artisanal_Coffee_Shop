@@ -16,14 +16,14 @@ export const formulateMeal = async (req, res) => {
 
     try {
 
-        //1. DATABASE TRANSECTION STEP A: Log the user`s intial craving parameters
+        //1. DATABASE TRANSACTION STEP A: Log the user's initial craving parameters
         const [insertRequest] = await db.insert(userRequests).values({
             ingredientsInput: ingredients.trim(),
             cravingVibe: vibe || "Comfort Food 🥞"
-        });
+        }).returning({ id: userRequests.id });
 
         //Extract the exact generated auto-increment primary key ID index record
-        const newRequestId = insertRequest.insertId;
+        const newRequestId = insertRequest.id;
 
         //2. CORE INTELLIGENCE ROUTING STEP B: Call the Gemini GenAI model framwork
         const userPrompt = `Available Leftovers: ${ingredients}. Preferred Target Vibe: ${vibe}.`;

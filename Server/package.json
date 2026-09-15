@@ -2,6 +2,7 @@
   "type": "module",
   "dependencies": {
     "@google/genai": "^2.8.0",
+    "@neondatabase/serverless": "^1.1.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
@@ -12,10 +13,9 @@
     "drizzle-kit": "^0.31.10"
   },
   "scripts": {
-  "start": "node src/app.js",
-  "dev": "nodemon src/app.js",
-  "db:generate": "drizzle-kit generate",
-  "db:push": "drizzle-kit push"
-}
-
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push"
+  }
 }
