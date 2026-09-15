@@ -1,38 +1,75 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import { validateEnv, env } from './config/env.js';
+import { globalLimiter } from './middleware/rateLimiter.js';
 import recipeRoutes from './routes/recipeRoutes.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Explicitly load .env from Server root directory regardless of current working directory
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// 1. Startup validation of required environment variables
+validateEnv();
 
 const app = express();
 
-// Middleware setup
+// 2. Helmet Security Headers Setup
+app.use(helmet({
+    contentSecurityPolicy: false, // Set to true with custom directives if serving HTML directly
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// 3. CORS Configuration
+const allowedOrigins = [env.CLIENT_ORIGIN, 'http://localhost:5173'];
 const corsOptions = {
-    origin: 'http://localhost:5173',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl) or matching allowed origins
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Blocked by CORS security policy.'));
+        }
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
 };
-app.use(cors(corsOptions));         // Allows React app on port 5173 to talk to this server safely without CORS issues
-app.use(express.json());            // Enables the server to read incoming JSON payloads (req.body)
+app.use(cors(corsOptions));
 
-// API Routes Mounting
+// 4. Request Payload Body Limits (prevents memory buffer exhaustion attacks)
+app.use(express.json({ limit: '10kb' }));
+
+// 5. Global Rate Limiter
+app.use(globalLimiter);
+
+// 6. Health Check Endpoint
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// 7. API Routes Mounting
 app.use("/api/recipes", recipeRoutes);
 
-// Global Error Catch-All to keep your server from crashing during unhandled requests
+// 8. Production-Safe Global Error Handler (prevents stack trace / database schema leaks)
 app.use((err, req, res, next) => {
-    console.error("Internal App Error Stack: ", err.stack);
-    res.status(500).json({ error: "Internal Server Error." });
+    console.error("Unhandled Error Stack: ", err.stack || err.message);
+
+    const isProduction = env.NODE_ENV === 'production';
+
+    res.status(err.status || 500).json({
+        error: isProduction ? "An unexpected server error occurred." : (err.message || "Internal Server Error")
+    });
 });
 
-// Start SERVER
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`🚀 CravingCraft Server Running Securely on Port ${PORT}`);
+// 9. Start Server & Graceful Shutdown Setup
+const PORT = env.PORT;
+const server = app.listen(PORT, () => {
+    console.log(`🚀 CravingCraft Server Running Securely on Port ${PORT} [Env: ${env.NODE_ENV}]`);
 });
+
+const gracefulShutdown = (signal) => {
+    console.log(`\n${signal} received. Closing HTTP server gracefully...`);
+    server.close(() => {
+        console.log('HTTP Server closed. Exiting process.');
+        process.exit(0);
+    });
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
