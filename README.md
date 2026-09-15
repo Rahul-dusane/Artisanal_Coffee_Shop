@@ -1,186 +1,143 @@
-# Artisanal Coffee Shop ☕ - CravingCraft AI Recipe Engine
+# Artisanal Coffee Shop ☕
 
-CravingCraft (Artisanal Coffee Shop) is an enterprise-grade, AI-powered culinary and recipe formulation platform that transforms available ingredients and flavor vibes into structured, artisanal coffee and fusion recipes. Built with a **React 18 + Redux Toolkit** frontend and a **Node.js + Express** backend integrated with **Neon Serverless PostgreSQL**, **Drizzle ORM**, and **Google Gemini AI (`gemini-2.5-flash`)**, CravingCraft combines modern security hardening, structured JSON response schemas, and persistent cloud database tracking.
+An AI-powered Artisanal Coffee & Midnight Culinary Recipe Formulator featuring a **React + Redux Toolkit** single-page application frontend and a **Node.js + Express** backend integrated with **Neon Serverless PostgreSQL**, **Drizzle ORM**, and **Google Gemini AI**.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Technical Architecture
 
-CravingCraft follows a decoupled microservices-ready architecture featuring a responsive Single-Page Application (SPA) frontend, a production-hardened Express REST API server, Google Gemini GenAI integration, and a serverless PostgreSQL database cloud layer.
+### Architecture Overview
 
 ```mermaid
-graph TD
-    subgraph "Frontend Layer (React 18 + Vite)"
-        UI["Recipe Formulator UI Page"]
-        InputStation["Ingredient Input Component"]
-        VibeSelector["Vibe Selector Component"]
-        CanvasView["Interactive Recipe Canvas"]
-        ReduxStore["Redux Toolkit Store (recipeSlice)"]
+flowchart TD
+    subgraph Client ["Client Layer (React + Vite)"]
+        UI["React Components\n(RecipeFormulator, RecipeCanvas, VibeSelector)"]
+        Redux["Redux Toolkit Store\n(recipeSlice, useRecipeSelectors)"]
+        Axios["Axios HTTP Client"]
+        UI --> Redux
+        Redux --> Axios
     end
 
-    subgraph "Security & Protection Layer"
-        Helmet["Helmet Security Headers (No-Sniff, Frameguard, CSP)"]
-        RateLimit["Rate Limiters (Global 100/15min, Recipe 10/min)"]
-        Validator["Input Sanitizer & Length Validator (Max 500 Chars)"]
-        Cors["CORS Origin Verifier (CLIENT_ORIGIN)"]
+    subgraph Security ["Security & Middleware Layer"]
+        Helmet["Helmet HTTP Headers\n(CSP, HSTS, No-Sniff)"]
+        RateLimit["Express Rate Limiters\n(Global & Recipe Limiters)"]
+        Validation["Input Validation Middleware\n(Max 500 chars, String Sanitization)"]
     end
 
-    subgraph "API Layer (Express.js / Node.js)"
-        Router["Express REST Router (/api/recipes, /api/health)"]
-        EnvChecker["Startup Environment Validator"]
-        ErrHandler["Production Error Masker"]
+    subgraph Backend ["Backend Service Layer (Express.js)"]
+        Routes["Express Router\n(/api/recipes/formulate, /api/health)"]
+        Controller["Recipe Controller\n(formulateMeal)"]
+        GenAI["@google/genai SDK\n(gemini-2.5-flash)"]
+        Routes --> Controller
+        Controller --> GenAI
     end
 
-    subgraph "AI Intelligence Engine (Google GenAI)"
-        ChefAgent["'The Midnight Fusion Chef' Persona Engine"]
-        GenAI["@google/genai SDK (gemini-2.5-flash)"]
-        SchemaGuard["Strict Response Schema Enforcer"]
-        RetryLoop["Exponential Backoff Retry Loop (503 Resilience)"]
-    end
-
-    subgraph "Storage & Cloud Database Layer"
-        Drizzle["Drizzle ORM (drizzle-orm/neon-http)"]
-        NeonDB["Neon Serverless PostgreSQL DB"]
+    subgraph Database ["Database Layer (Neon PostgreSQL)"]
+        Drizzle["Drizzle ORM (neon-http)"]
         UserReqTable[("user_requests Table")]
         RecipesTable[("recipes Table")]
+        Drizzle --> UserReqTable
+        Drizzle --> RecipesTable
     end
 
-    UI --> InputStation
-    UI --> VibeSelector
-    UI --> ReduxStore
-    ReduxStore --> Router
-
-    Router --> Helmet
-    Helmet --> Cors
-    Cors --> RateLimit
-    RateLimit --> Validator
-    Validator --> EnvChecker
-
-    EnvChecker --> Drizzle
-    Drizzle --> UserReqTable
-    UserReqTable --> ChefAgent
-
-    ChefAgent --> GenAI
-    GenAI --> SchemaGuard
-    SchemaGuard --> RetryLoop
-    RetryLoop --> Drizzle
-    Drizzle --> RecipesTable
-
-    RecipesTable --> CanvasView
+    Axios -->|"HTTP POST (JSON)"| Helmet
+    Helmet --> RateLimit
+    RateLimit --> Validation
+    Validation --> Routes
+    Controller -->|"Insert Log & Read Schema"| Drizzle
 ```
+
+### Data Flow Pipeline
+
+1. **User Input Phase**: The user inputs available kitchen ingredients and selects a target culinary vibe on the React SPA.
+2. **State & Dispatch**: Redux Toolkit dispatches `formulateMealThank`, sending an asynchronous HTTP request via Axios.
+3. **Security Ingress**: Express passes requests through **Helmet** security headers, **CORS** origin checks, **Rate Limiting** (max 10 requests/min), and **Input Validation** (max 500 chars).
+4. **Database Transaction A**: Log the initial user request parameters (`ingredientsInput`, `cravingVibe`) to Neon PostgreSQL (`user_requests` table) via Drizzle ORM and return the generated primary key `id`.
+5. **AI Generation Phase**: The server constructs a context-aware prompt (tailored with regional Indian household context & vibe rules) and calls `gemini-2.5-flash` with strict JSON response schema enforcement and retry resilience.
+6. **Database Transaction B**: Parse structured recipe payload and persist into Neon PostgreSQL (`recipes` table) linked via `request_id` foreign key.
+7. **Client Render**: Response JSON is returned to Redux store and visually rendered in `RecipeCanvas`.
 
 ---
 
-## 🤖 AI Recipe Formulation Workflow
+## 🛠️ Tech Stack
 
-The backend coordinates an end-to-end recipe generation workflow. Each user prompt undergoes sanitization, primary logging in Neon DB, Gemini AI formulation with fallback retry logic, structured JSON validation, and relational database persistence.
-
-```mermaid
-graph LR
-    Start([Raw Leftovers & Vibe Input]) --> Val["1. Ingress Validation & Rate Limit"]
-    Val --> LogReq["2. DB Log (user_requests)"]
-    LogReq --> AI["3. Gemini AI Formulation Engine"]
-    AI --> Retry{"Attempt Succeeded?"}
-    Retry -- "No (503 Spike)" --> AI
-    Retry -- "Yes" --> Parse["4. JSON Schema Validation"]
-    Parse --> LogRec["5. DB Log (recipes)"]
-    LogRec --> End([Persisted Recipe Payload to Client Canvas])
-```
-
-### Workflow Execution Stages
-
-1. **Ingress Validation & Rate Limiting** ([`Server/src/middleware/validateRecipe.js`](file:///d:/Artisanal_Coffee_Shop/Server/src/middleware/validateRecipe.js)):
-   - Sanitizes ingredient strings and limits input to 500 characters.
-   - Enforces rate limits (10 requests per minute per IP) to safeguard Google Gemini API quotas.
-
-2. **Primary Request Persistence** ([`Server/src/controller/recipeController.js`](file:///d:/Artisanal_Coffee_Shop/Server/src/controller/recipeController.js)):
-   - Logs incoming user ingredient lists and selected vibes into the `user_requests` table in Neon PostgreSQL.
-   - Retrieves the auto-generated primary key `id` using Drizzle ORM `.returning({ id: userRequests.id })`.
-
-3. **Intelligence Engine & Persona Routing**:
-   - Invokes `@google/genai` using `"The Midnight Fusion Chef"` system persona tailored for Indian kitchen contexts and fusion concepts.
-   - Enforces strict JSON Schema guardrails (`dishName`, `prepTime`, `difficulty`, `ingredientsUtilized`, `instructions`).
-
-4. **Retry Resilience**:
-   - Handles temporary 503 high-demand API spikes using exponential backoff retry loops (up to 3 attempts).
-
-5. **Recipe Persistence & Client Delivery**:
-   - Serializes instructions into JSON and writes the resulting record to the `recipes` table linked via the `requestId` foreign key.
-   - Returns a structured `200 OK` JSON response to the React Redux store.
-
----
-
-## 🧮 Vibe Engine & Recipe Categorization
-
-CravingCraft dynamically adapts recipe complexity and culinary style based on selected flavor vibes.
-
-### Vibe Taxonomy
-
-| Vibe Category | Style Focus | Complexity Scaling |
+| Layer | Technology | Description |
 | :--- | :--- | :--- |
-| **Comfort Food 🥞** | Authentic local street food & comforting traditional staples | **Easy**: One-pan/one-bowl methods |
-| **Lazy Breakfast 🍳** | Fast, minimal chopping instant breakfast twists | **Easy**: High speed, minimal equipment |
-| **Gourmet 🍷** | Indo-Western fusion, progressive plating & technique | **Hard**: Layered flavors & precise reductions |
-| **Cheat Day 🍔** | Rich, indulgent late-night fusion cravings | **Medium**: Parallel cooking & grilling |
-| **Modern Twist 🌮** | Creative street food twists (e.g., Masala Tawa Crepes) | **Medium**: Repurposing leftovers creatively |
+| **Frontend** | React 18, Vite | High-performance Single Page Application framework |
+| **State Management** | Redux Toolkit | Centralized state management for formulator inputs & AI recipes |
+| **Backend** | Node.js, Express.js | Enterprise REST API server |
+| **AI Engine** | Google Gemini AI (`@google/genai`) | `gemini-2.5-flash` with structured JSON schema outputs |
+| **Database** | Neon Serverless PostgreSQL | Serverless cloud PostgreSQL instance |
+| **ORM** | Drizzle ORM (`drizzle-orm/pg-core`) | Type-safe SQL query builder and schema management |
+| **Security** | Helmet, Express Rate Limit | Security HTTP headers, CORS origin protection, & rate limiting |
 
 ---
 
-## 🗄️ Database Schema & ORM Entities
+## 🗄️ Database Schema & Data Model
 
-The system uses Drizzle ORM (`drizzle-orm/pg-core`) supporting Neon Serverless PostgreSQL.
+### Entity Relationship Model
 
-```mermaid
-erDiagram
-    user_requests ||--o{ recipes : "generates (1:N)"
+- **`user_requests`**: Logs incoming raw user ingredient prompts and selected vibes.
+- **`recipes`**: Stores AI-generated structured recipes mapped to `user_requests` via a 1:N Foreign Key relationship (`onDelete: CASCADE`).
 
-    user_requests {
-        serial id PK
-        text ingredients_input
-        varchar craving_vibe
-        timestamp created_at
-    }
+```sql
+-- 1. Table: user_requests
+CREATE TABLE IF NOT EXISTS user_requests (
+    id SERIAL PRIMARY KEY,
+    ingredients_input TEXT NOT NULL,
+    craving_vibe VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-    recipes {
-        serial id PK
-        integer request_id FK
-        varchar dish_name
-        varchar prep_time
-        varchar difficulty
-        text full_output_instructions
-        timestamp created_at
-        timestamp updated_at
-    }
+-- 2. Table: recipes
+CREATE TABLE IF NOT EXISTS recipes (
+    id SERIAL PRIMARY KEY,
+    request_id INTEGER NOT NULL REFERENCES user_requests(id) ON DELETE CASCADE,
+    dish_name VARCHAR(255) NOT NULL,
+    prep_time VARCHAR(50) NOT NULL,
+    difficulty VARCHAR(50) NOT NULL,
+    full_output_instructions TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-### Core Schema Tables
+---
 
-- **`user_requests`**: Stores candidate input prompts, raw ingredient strings, target craving vibes, and request timestamps.
-- **`recipes`**: Stores AI-generated recipes, dish names, preparation times, difficulty levels, instruction JSON arrays, and foreign key references (`request_id` -> `user_requests.id`).
+## 🛡️ Security & Production Hardening Features
+
+- **HTTP Security Headers**: Powered by `helmet` (`x-content-type-options: nosniff`, `x-frame-options: SAMEORIGIN`, hidden `X-Powered-By`).
+- **DDoS & Quota Guard**: `express-rate-limit` enforces global limits (100 req/15 min) and strict recipe generation limits (10 req/min).
+- **Payload & Input Validation**: Enforces string length limits (max 500 chars for ingredients) and JSON request body caps (`10kb`).
+- **Startup Validation**: Validates `DATABASE_URL` and `GEMINI_API_KEY` before starting the HTTP server.
+- **Production Error Masking**: Suppresses internal database schemas and stack traces from client responses in production mode.
+- **Graceful Shutdown**: Listens for `SIGINT` and `SIGTERM` signals to cleanly close HTTP connections.
 
 ---
 
-## 🌐 REST API Reference
+## 📡 API Reference
 
-All backend API endpoints are available under the `/api` prefix.
+### 1. Health Check
+- **Endpoint**: `GET /api/health`
+- **Response**: `200 OK`
+  ```json
+  {
+    "status": "OK",
+    "timestamp": "2026-09-15T14:42:06.742Z"
+  }
+  ```
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | System health check, uptime status, and security verification |
-| `POST` | `/api/recipes/formulate` | Formulates AI recipes, logs requests/recipes to DB, and returns JSON |
-
-### Endpoint Details
-
-#### `POST /api/recipes/formulate`
-- **Request Headers**: `Content-Type: application/json`
-- **Request Payload**:
+### 2. Formulate Recipe
+- **Endpoint**: `POST /api/recipes/formulate`
+- **Content-Type**: `application/json`
+- **Request Body**:
   ```json
   {
     "ingredients": "espresso shot, steamed milk, caramel syrup",
     "vibe": "gourmet"
   }
   ```
-- **Response Payload (`200 OK`)**:
+- **Success Response (`200 OK`)**:
   ```json
   {
     "dishName": "Velvet Caramel Espresso Dream",
@@ -202,139 +159,94 @@ All backend API endpoints are available under the `/api` prefix.
 
 ---
 
-## 🛡️ Production Security & Hardening Features
-
-- **HTTP Security Headers (`helmet`)**: Configured with `nosniff`, `SAMEORIGIN` frameguard, HSTS, and hidden `X-Powered-By` headers.
-- **DDoS & Quota Guard (`express-rate-limit`)**: Global limiter (100 req/15 min) and dedicated recipe formulation limiter (10 req/min).
-- **Request Validation**: String length limits (max 500 chars for ingredients) and JSON request body size limits (`10kb`).
-- **Environment Checks**: Validates `DATABASE_URL` and `GEMINI_API_KEY` on startup, exiting gracefully if missing.
-- **Production Error Masking**: Suppresses stack traces and internal database error details in production (`NODE_ENV=production`).
-- **Graceful Shutdown**: Handles `SIGINT` and `SIGTERM` signals cleanly to avoid database connection leaks.
-
----
-
-## 💻 Frontend Application Architecture
-
-The frontend is built as a single-page React 18 application with Redux Toolkit and Vite.
+## 📂 Project Structure
 
 ```
-Client/
-├── src/
-│   ├── Features/
-│   │   ├── Components/
-│   │   │   ├── LoadingView.jsx       # Animated cooking loader
-│   │   │   ├── RecipeCanvas.jsx      # Visual recipe card & step viewer
-│   │   │   └── VibeSelector.jsx      # Interactive vibe picker buttons
-│   │   ├── Config/
-│   │   │   └── recipeFormulator.config.js # Vibe definitions & initial state
-│   │   ├── Hook/
-│   │   │   └── useRecipeSelectors.js  # Redux store selector hooks
-│   │   ├── Page/
-│   │   │   └── RecipeFormulator.jsx   # Main formulator layout & interaction
-│   │   ├── Slice/
-│   │   │   └── recipeSlice.js         # Redux Toolkit slice & async thunk
-│   │   └── Style/
-│   │       └── RecipeFormulator.css   # Ambient food sticker CSS styling
-│   ├── Store/
-│   │   └── store.js                   # Redux store configuration
-│   ├── App.jsx
-│   └── main.jsx
-├── .env.example
-├── package.json
-└── vite.config.js
+Artisanal_Coffee_Shop/
+├── Client/                         # React + Vite Frontend
+│   ├── src/
+│   │   ├── Features/
+│   │   │   ├── Components/         # RecipeCanvas, VibeSelector, LoadingView
+│   │   │   ├── Hook/               # useRecipeSelectors
+│   │   │   ├── Page/               # RecipeFormulator
+│   │   │   └── Slice/              # recipeSlice (Redux Toolkit)
+│   │   ├── Store/                  # Redux Store setup
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── .env.example
+│   ├── package.json
+│   └── vite.config.js
+│
+└── Server/                         # Node.js + Express Backend
+    ├── drizzle/                    # Drizzle ORM SQL migrations & PostgreSQL schema
+    │   └── schema.js
+    ├── src/
+    │   ├── config/                 # Neon DB connection & env validation
+    │   ├── controller/             # Recipe formulation logic & Gemini AI API
+    │   ├── middleware/             # Rate limiters & payload validators
+    │   ├── routes/                 # Express API routes
+    │   └── app.js                  # Main server entrypoint
+    ├── .env.example
+    ├── drizzle.config.js
+    └── package.json
 ```
 
 ---
 
-## 🛠️ Real-World Setup & Execution Guide
+## 🛠️ Getting Started
 
 ### Prerequisites
-- **Node.js**: v18 or higher (with `npm`)
+
+- **Node.js**: `v18.0.0` or higher
 - **Database**: Neon Serverless PostgreSQL Database account
 - **AI Key**: Google Gemini AI API Key
 
----
+### Installation & Environment Setup
 
-### Step 1: Configure Environment Variables (`.env`)
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Rahul-dusane/Artisanal_Coffee_Shop.git
+   cd Artisanal_Coffee_Shop
+   ```
 
-Create a `.env` file inside `Server/`:
+2. **Configure Backend (`Server/`):**
+   ```bash
+   cd Server
+   npm install
+   ```
+   Create a `.env` file inside `Server/`:
+   ```env
+   PORT=5000
+   NODE_ENV=development
+   CLIENT_ORIGIN=http://localhost:5173
+   DATABASE_URL=postgresql://username:password@ep-something.neon.tech/neondb?sslmode=require
+   GEMINI_API_KEY=your_google_gemini_api_key
+   ```
+   Push Drizzle PostgreSQL database schema to Neon:
+   ```bash
+   npx drizzle-kit push
+   ```
+   Start Backend Server:
+   ```bash
+   npm run dev
+   ```
 
-```env
-PORT=5000
-NODE_ENV=development
-CLIENT_ORIGIN=http://localhost:5173
-
-# Database Connection (Neon Serverless PostgreSQL)
-DATABASE_URL=postgresql://username:password@ep-something.neon.tech/neondb?sslmode=require
-
-# AI LLM Provider Configuration
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-```
-
-Create a `.env` file inside `Client/`:
-
-```env
-BASE_URL=http://localhost:5000
-```
-
----
-
-### Step 2: Push Database Schema & Start Backend Server
-
-Open a terminal window and execute:
-
-```powershell
-# 1. Navigate to Server directory
-cd Server
-
-# 2. Install backend dependencies
-npm install
-
-# 3. Push Drizzle schema to Neon PostgreSQL
-npx drizzle-kit push
-
-# 4. Start development server
-npm run dev
-```
-
-> **API Status**: The backend server will run at `http://localhost:5000`. Test health status by opening `http://localhost:5000/api/health`.
-
----
-
-### Step 3: Start React Frontend Application
-
-Open a second terminal window and execute:
-
-```powershell
-# 1. Navigate to Client directory
-cd Client
-
-# 2. Install frontend dependencies
-npm install
-
-# 3. Launch Vite dev server
-npm run dev
-```
-
-> **Access Application**: Navigate to `http://localhost:5173` in your browser.
-
----
-
-## 🧪 Security & Verification Auditing
-
-To verify syntax, security headers, and endpoint health:
-
-```powershell
-# 1. Check Node.js syntax
-cd Server
-node --check src/app.js
-
-# 2. Verify Health Check endpoint
-curl http://localhost:5000/api/health
-```
+3. **Configure Frontend (`Client/`):**
+   ```bash
+   cd ../Client
+   npm install
+   ```
+   Create a `.env` file inside `Client/`:
+   ```env
+   BASE_URL=http://localhost:5000
+   ```
+   Start Frontend Development Client:
+   ```bash
+   npm run dev
+   ```
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+MIT License
